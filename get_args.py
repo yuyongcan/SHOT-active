@@ -24,8 +24,8 @@ def get_source_args():
     return args
 
 def get_target_args():
-    parser = argparse.ArgumentParser(description='SHOT')
-    parser.add_argument('--gpu_id', type=str, nargs='?', default='0', help="device id to run")
+    parser = argparse.ArgumentParser(description='SHOT_active')
+    parser.add_argument('--gpu_id', type=str, nargs='?', default='3', help="device id to run")
     parser.add_argument('--s', type=int, default=0, help="source")
     parser.add_argument('--t', type=int, default=None, help="target")
     parser.add_argument('--max_epoch', type=float, default=15, help="max iterations")
@@ -58,8 +58,9 @@ def get_target_args():
     parser.add_argument('--da', type=str, default='uda', choices=['uda', 'pda'])
     parser.add_argument('--issave', type=bool, default=True)
 
-    parser.add_argument('--runs', type=int, default=3)
-    parser.add_argument('--query', type=str, default="cet",choices=["clue","rand","ent","km","max","sam","mg",'cet'])
+    parser.add_argument('--disc',type=str,default='r1')
+    parser.add_argument('--runs', type=int, default=1)
+    parser.add_argument('--query', type=str, default="mg",choices=["clue","rand","ent","km","max","sam","mg",'cet'])
     parser.add_argument('--budgets', type=float, default=0.05)
     parser.add_argument('--tau', type=float, default=0.9)
     parser.add_argument('--T', type=float, default=1)
@@ -81,6 +82,6 @@ def get_target_args():
     parser.add_argument('--pro', type=float, default=0.05)
 
     args = parser.parse_args()
-
+    args.per_run_epoch=args.max_epoch//args.runs
 
     return args

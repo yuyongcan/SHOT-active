@@ -135,62 +135,9 @@ def obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list, unlb_idx, total_
         new_lb_ind.append(unlb_idx[id])
 
     for id in range(len(total_list)):
-        # if str(id) not in new_lb_ind:
         if id not in new_lb_ind:
             new_unlb_list.append(total_list[id])
             new_unlb_ind.append(id)
-    # exit(0)
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-
-def fw_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    netF.eval()
-    netB.eval()
-    netC.eval()
-    query_loader = data_load_Q(args, unlb_list)['Q']
-    out_bank, emb_bank = get_embedding(args, netF, netB, netC, query_loader)
-    sfm_bank = nn.Softmax(dim=1)(out_bank)
-    score_bank = sfm_bank ** 2 / sfm_bank.sum(dim=0)
-    emb_bank = emb_bank.cpu().numpy()
-
-    # weights = -(score_bank*torch.log(score_bank)).sum(1).cpu().numpy()
-    weights = torch.max((sfm_bank ** 2 / sfm_bank.sum(0)), 1)[0].cpu().numpy()
-
-    new_lb_list, new_lb_ind = labeled_list, labeled_ind
-
-    ## weighted Kmeans
-    km = KMeans(n)
-    km.fit(emb_bank, sample_weight=weights)
-
-    ## Find nearest neighbors to inference the cluster centroids
-    dists = euclidean_distances(km.cluster_centers_, emb_bank)
-
-    sort_idxs = dists.argsort(axis=0)  # range from 0 to len(total)
-
-    for i in range(n):
-        ## check if the repeated index in the list
-        s_idx = 0
-        idx = sort_idxs[i, s_idx]
-        total_idx = unlb_idx[idx]
-
-        while total_idx in new_lb_ind:
-            s_idx += 1
-            idx = sort_idxs[i, s_idx]
-            total_idx = unlb_idx[idx]
-
-        assert total_idx not in new_lb_ind
-
-        ## add the quried index in the labeled list and labeled index
-        new_lb_ind.append(total_idx)
-        new_lb_list.append(total_list[int(total_idx)])
-
-    ## update unlabeled list
-    new_unlb_list, new_unlb_ind = [], []
-    for id in range(len(total_list)):
-        if id not in new_lb_ind:
-            new_unlb_list.append(total_list[id])
-            new_unlb_ind.append(id)
-
     return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
 
 
@@ -398,25 +345,6 @@ def KM_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb
     return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
 """
 
-
-@torch.no_grad()
-def shot_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    netF.eval()
-    netB.eval()
-    netC.eval()
-    query_loader = data_load_Q(args, unlb_list)['Q']
-    dist_bank = obtain_label(query_loader, netF, netB, netC, args, cal_dist=True)
-    min_dist = dist_bank.min(axis=1)
-    print(min_dist.shape)
-    # sort_idxs = min_dist.argsort(axis=0, descending=True)
-    sort_idx = np.argsort(-min_dist)
-
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
-                                                                       unlb_idx, total_list, n)
-
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-
 @torch.no_grad()
 def Rand_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
     netF.eval()
@@ -483,143 +411,49 @@ def Max_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unl
     max_bank, _ = torch.max(score_bank, dim=1)
 
     sort_idx = max_bank.argsort(axis=0)
-
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
-                                                                       unlb_idx, total_list, n)
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-
-def ST_out_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    netF.eval()
-    netB.eval()
-    netC.eval()
-
-    try:
-        _, mean_out, _, _ = resume_ckpt(args)
-    except:
-        print('Training UDA model from scratch...\n ')
-        train_target(args)
-        _, mean_out, _, _ = resume_ckpt(args)
-
-    # sfm_out = mean_out ** 2 / mean_out.sum(dim=0)
-    # outputs_target = sfm_out / sfm_out.sum(dim=1, keepdim=True)
-    mean_ent = loss.Entropy(mean_out)
-    sort_idx = mean_ent.argsort(axis=0, descending=True)
     print(sort_idx)
 
     new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
                                                                        unlb_idx, total_list, n)
-
     return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-
-def DA_ent_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    netF.eval()
-    netB.eval()
-    netC.eval()
-    _, mean_out, _, _ = resume_ckpt(args, last=True)
-
-    # sfm_out = mean_out ** 2 / mean_out.sum(dim=0)
-    # outputs_target = sfm_out / sfm_out.sum(dim=1, keepdim=True)
-    mean_ent = loss.Entropy(mean_out)
-    sort_idx = mean_ent.argsort(axis=0, descending=True)
-    print(sort_idx)
-
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
-                                                                       unlb_idx, total_list, n)
-
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
 
 @torch.no_grad()
-def PL_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
+def CET_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
     netF.eval()
     netB.eval()
     netC.eval()
+    # sfmax = nn.Softmax(dim=1)
+    CEL = CrossEntropyLoss(reduce=False)
+
+    # with torch.no_grad():
+    #     tgt_loader = data_load_Q(args, unlb_list)['Q']
+    #     loss_total = None
+    #     for _, (input, _, idx) in enumerate(tgt_loader):
+    #         input = input.cuda()
+    #         out = netC(netB(netF(input)))
+    #         # out=sfmax(out)
+    #         _, pseudo_labels = torch.max(out, dim=1)
+    #         loss_batch = CEL(out, pseudo_labels)
+    #         if loss_total is None:
+    #             loss_total = loss_batch
+    #         else:
+    #             loss_total = torch.cat((loss_total, loss_batch),dim=0)
+    # sort_idx = loss_total.argsort(axis=0, descending=True)
+
     tgt_loader = data_load_Q(args, unlb_list)['Q']
-    mem_label = obtain_label(tgt_loader, netF, netB, netC, args)
-    mem_out, _ = get_embedding(args, netF, netB, netC, tgt_loader)
-    sfm_out = nn.Softmax(dim=1)(mem_out / args.T) + 1e-8
-    print(mem_label)
-    lb = torch.zeros(len(mem_label), dtype=torch.int64).cuda()
-    lb = lb.long()
-    for i in range(lb.size(0)):
-        lb[i] = mem_label[i]
-    targets_t = torch.zeros(lb.size(0), args.class_num).cuda().scatter_(1, lb.view(-1, 1), 1)
-    score = - torch.sum(sfm_out.log() * targets_t, dim=1) * args.cls_par
+    out_bank, _ = get_embedding(args, netF, netB, netC, tgt_loader)
+    _,pseudo_labels = torch.max(out_bank,dim=1)
+    loss_total= CEL(out_bank,pseudo_labels)
+    sort_idx = loss_total.argsort(axis=0, descending=True)
 
-    entropy_loss = loss.Entropy(sfm_out)
-
-    score += entropy_loss
-
-    sort_idx = score.argsort(axis=0, descending=True)
+    print(sort_idx)
 
     new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
                                                                        unlb_idx, total_list, n)
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-
-def Error_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    tgt_loader = data_load_Q(args, unlb_list)['Q']
-
-    wr_list, wr_idx, _, _ = get_wrong_list(tgt_loader, netF, netB, netC, total_list, labeled_list, labeled_ind,
-                                           unlb_list, unlb_idx)
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = [], [], [], []
-    # print(len(wr_list))
-
-    netF.eval()
-    netB.eval()
-    netC.eval()
-    # rand_list = random.sample(range(len(wr_list)), n)
-
-    tgt_loader = data_load_Q(args, wr_list)['Q']
-    out_bank, _ = get_embedding(args, netF, netB, netC, tgt_loader)
-    out_bank = nn.Softmax(dim=1)(out_bank / args.T) + 1e-8
-    H = loss.Entropy(out_bank)
-    sort_idx = H.argsort(axis=0, descending=True)
-
-    tag = args.test1
-
-    if tag == 1:
-        for i in range(n):
-            id = sort_idx[i]
-            new_lb_list.append(wr_list[id])
-            new_lb_ind.append(wr_idx[id])
-
-    if tag == 2:
-        per_cls = int(n / args.class_num)
-        clss_count = torch.zeros(args.class_num).cuda()  # * (per_cls+1)
-        i = 0
-        while True:
-            id = sort_idx[i]
-            # print(wr_list[id])
-            c = wr_list[id][1]
-            # print(clss_count[c], per_cls)
-            if clss_count[c] < per_cls:
-                clss_count[c] += 1
-                new_lb_list.append(wr_list[id])
-                new_lb_ind.append(wr_idx[id])
-
-            # print(clss_count.sum())
-            if clss_count.sum() > n:
-                break
-            i += 1
-            # print(i, sort_idx.size(0))
-            if i >= sort_idx.size(0):
-                # print(i,per_cls)
-                i = 0
-                per_cls += 1
-
-    for id in range(len(total_list)):
-        if id not in new_lb_ind:
-            new_unlb_list.append(total_list[id])
-            new_unlb_ind.append(id)
 
     return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
 
 def SAM_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    tgt_loader = data_load_Q(args, unlb_list)['Q']
     netF_CP, netB_CP, netC_CP = New_model(args)
     netF_CP.load_state_dict(netF.state_dict())
     netB_CP.load_state_dict(netB.state_dict())
@@ -637,62 +471,19 @@ def SAM_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unl
         param_group += [{'params': v, 'lr': learning_rate}]
     for k, v in netB_CP.named_parameters():
         param_group += [{'params': v, 'lr': learning_rate}]
-
+    # sfmax=nn.Softmax(dim=1)
     optimizer = SAM_first(param_group,optim.SGD,args.pro)
     optimizer.zero_grad()
     tgt_loader = data_load_Q(args, unlb_list)['Q']
-
     CEL=CrossEntropyLoss()
     for _, (input, _, idx) in enumerate(tgt_loader):
         input = input.cuda()
         out = netC_CP(netB_CP(netF_CP(input)))
+        # out = sfmax(out)
         _,pseudo_labels=torch.max(out,dim=1)
         loss=CEL(out,pseudo_labels)
-        loss.backward()
+        loss.backward(retain_graph=True)
     optimizer.step()
-    netF_CP.eval()
-    netB_CP.eval()
-    netC_CP.eval()
-    CEL = CrossEntropyLoss(reduce=False)
-    with torch.no_grad():
 
-        tgt_loader = data_load_Q(args, unlb_list)['Q']
-        loss_total = None
-        for _, (input, _, idx) in enumerate(tgt_loader):
-            input = input.cuda()
-            out = netC_CP(netB_CP(netF_CP(input)))
-            _, pseudo_labels = torch.max(out, dim=1)
-            loss = CEL(out, pseudo_labels).cpu()
-            if loss_total is None:
-                loss_total = loss
-            else:
-                loss_total = torch.concat((loss_total, loss))
-    sort_idx = loss_total.argsort(axis=0, descending=True)
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
-                                                                       unlb_idx, total_list, n)
+    return CET_Query(args, netF_CP, netB_CP, netC_CP, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n)
 
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind
-
-def CET_Query(args, netF, netB, netC, total_list, labeled_list, labeled_ind, unlb_list, unlb_idx, n):
-    netF.eval()
-    netB.eval()
-    netC.eval()
-    tgt_loader = data_load_Q(args, unlb_list)['Q']
-    CEL = CrossEntropyLoss(reduce=False)
-    with torch.no_grad():
-        tgt_loader = data_load_Q(args, unlb_list)['Q']
-        loss_total = None
-        for _, (input, _, idx) in enumerate(tgt_loader):
-            input = input.cuda()
-            out = netC(netB(netF(input)))
-            _, pseudo_labels = torch.max(out, dim=1)
-            loss = CEL(out, pseudo_labels).cpu()
-            if loss_total is None:
-                loss_total = loss
-            else:
-                loss_total = torch.concat((loss_total, loss))
-    sort_idx = loss_total.argsort(axis=0, descending=True)
-    new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind = obtain_list(sort_idx, labeled_list, labeled_ind, unlb_list,
-                                                                       unlb_idx, total_list, n)
-
-    return new_lb_list, new_lb_ind, new_unlb_list, new_unlb_ind

@@ -1,12 +1,11 @@
+from pytorch_lightning import seed_everything
+seed_everything(2020)
 import os
 import os.path as osp
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from pytorch_lightning import seed_everything
-
 import loss
 import network
 import query
@@ -489,6 +488,7 @@ def main_active(args):
     for run in range(args.runs):
         print(len(total_list))
         l_list, l_idx, u_list, u_idx = Query_func(args, netF, netB, netC, total_list, l_list, l_idx, u_list, u_idx, B)
+        # exit()
         print(len(l_list), len(u_list))
 
         query_list = l_list[0:]
@@ -505,7 +505,7 @@ def main_active(args):
         args.out_file.write(log_str + '\n')
         args.out_file.flush()
 
-        netF, netB, netC = New_model(args)
+        # netF, netB, netC = New_model(args)
 
         # if args.test2:
         #     netF, netB, netC = per_mixmatch(args, netF, netB, netC, l_list, u_list, n=run + 1)
@@ -532,13 +532,7 @@ if __name__ == "__main__":
         args.class_num = 10
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
-    seed_everything(args.seed)
-    # SEED = args.seed
-    # torch.manual_seed(SEED)
-    # torch.cuda.manual_seed(SEED)
-    # np.random.seed(SEED)
-    # random.seed(SEED)
-    # torch.backends.cudnn.deterministic = True
+
 
     l = len(names)
     if args.t:
@@ -564,7 +558,7 @@ if __name__ == "__main__":
         args.output_dir_src = osp.join(args.output_src, args.da, args.dset, names[args.s][0].upper())
         args.output_dir_tgt = osp.join('ckps/target', args.da, args.dset,
                                        names[args.s][0].upper() + names[args.t][0].upper())
-        args.output_dir = osp.join(args.output, args.da, args.dset, args.query,
+        args.output_dir = osp.join(args.output, args.da, args.dset, args.query+'_'+args.disc,
                                    names[args.s][0].upper() + names[args.t][0].upper())
         args.name = names[args.s][0].upper() + names[args.t][0].upper()
 
@@ -582,9 +576,5 @@ if __name__ == "__main__":
         print_args(args)
         args.out_file.flush()
 
-        if args.mode == 1:
-            train_target(args)
-        elif args.mode == 2:
-            train_soft_shot(args)
-        else:
-            main_active(args)
+
+        main_active(args)
